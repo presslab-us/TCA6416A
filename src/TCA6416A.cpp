@@ -6,6 +6,7 @@
 // NB!: Only address 0 or 1
 bool TCA6416A::begin(uint8_t addr_bit, TwoWire *theWire) {
 	i2caddr = 0x20 | addr_bit;
+	i2cwidth = 2;
 	TW = theWire;
 	TW->begin();
 
@@ -17,6 +18,7 @@ bool TCA6416A::begin(uint8_t addr_bit, TwoWire *theWire) {
 
 	port_read();
 	mode_read();
+	pull_read();
 
 	return true;
 }
@@ -36,25 +38,34 @@ void TCA6416A::pin_write(uint8_t pinNum, uint8_t level) {
 void TCA6416A::pin_mode(uint8_t pinNum, int mode) {
 	uint16_t mask = 1 << pinNum;
 
-	if (mode == INPUT) {
-		pinModes |= mask;
-	} else {
-		pinModes &= ~mask;
+    switch(mode) {
+		case INPUT:
+		    pinModes |= mask;
+            pinPullEn &= ~mask;
+			break;
+		case INPUT_PULLUP:
+		    pinModes |= mask;
+            pinPullEn |= mask;
+			pinPullDir |= mask;
+			break;
+		case INPUT_PULLDOWN:
+		    pinModes |= mask;
+            pinPullEn |= mask;
+			pinPullDir &= ~mask;
+			break;
+		default:
+		    pinModes &= ~mask;
+            pinPullEn &= ~mask;
+			break;
 	}
-
 	mode_write(pinModes);
+	pull_write(pinPullEn, pinPullDir);
 }
 
-int TCA6416A::pin_read(uint8_t pinNum) {
+bool TCA6416A::pin_read(uint8_t pinNum) {
 	uint16_t mask = 1 << pinNum;
 
-	port_read();
-
-	if ((pinState & mask) == mask) {
-		return 1;
-	} else {
-		return 0;
-	}
+	return port_read() & mask;
 }
 
 void TCA6416A::port_write(uint16_t i2cportval) {
@@ -80,9 +91,7 @@ uint16_t TCA6416A::port_read() {
 	tempInput = TW->read();
 	tempInput |= TW->read() << 8;
 
-	pinState = (pinState & ~pinModes) | (tempInput & pinModes);
-
-	return pinState;
+	return tempInput;
 }
 
 void TCA6416A::mode_write(uint16_t modes) {
@@ -97,6 +106,27 @@ void TCA6416A::mode_write(uint16_t modes) {
 	pinModes = modes;
 }
 
+void TCA6416A::pull_write(uint16_t pullen, uint16_t pulldir) {
+	TW->beginTransmission((int)i2caddr);
+	TW->write(TCAREG_PULLEN0);
+
+	TW->write(pullen & 0x00FF);
+	TW->write(pullen >> 8 );
+
+	TW->endTransmission();
+
+	TW->beginTransmission((int)i2caddr);
+	TW->write(TCAREG_PULLDIR0);
+
+	TW->write(pulldir & 0x00FF);
+	TW->write(pulldir >> 8 );
+
+	TW->endTransmission();
+
+	pinPullEn = pullen;
+	pinPullDir = pulldir;
+}
+
 uint16_t TCA6416A::mode_read() {
 	TW->beginTransmission((int)i2caddr);
 	TW->write(TCAREG_CONFIG0);
@@ -108,4 +138,26 @@ uint16_t TCA6416A::mode_read() {
 	pinModes |= TW->read() << 8;
 
 	return pinModes;
+}
+
+uint16_t TCA6416A::pull_read() {
+	TW->beginTransmission((int)i2caddr);
+	TW->write(TCAREG_PULLEN0);
+	TW->endTransmission();
+
+	TW->requestFrom((int)i2caddr, (int)i2cwidth);
+
+	pinPullEn = TW->read();
+	pinPullEn |= TW->read() << 8;
+
+	TW->beginTransmission((int)i2caddr);
+	TW->write(TCAREG_PULLDIR0);
+	TW->endTransmission();
+
+	TW->requestFrom((int)i2caddr, (int)i2cwidth);
+
+	pinPullDir = TW->read();
+	pinPullDir |= TW->read() << 8;
+
+	return pinPullEn;
 }

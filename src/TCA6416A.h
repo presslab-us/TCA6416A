@@ -13,6 +13,10 @@
 #define TCAREG_POLARITY1 0x05
 #define TCAREG_CONFIG0 0x06
 #define TCAREG_CONFIG1 0x07
+#define TCAREG_PULLEN0 0x46
+#define TCAREG_PULLEN1 0x47
+#define TCAREG_PULLDIR0 0x48
+#define TCAREG_PULLDIR1 0x49
 
 /*
  TODO: If I understood the manual correctly, the command only needs to be sent to change active register
@@ -26,11 +30,13 @@ public:
 	bool begin(uint8_t addr_pin, TwoWire *theWire = &Wire);
 	void pin_mode(uint8_t pinNum, int mode);
 	void pin_write(uint8_t pinNum, uint8_t level);
-	int  pin_read(uint8_t pinNum);
+	bool pin_read(uint8_t pinNum);
 	void port_write(uint16_t i2cportval);
 	uint16_t port_read();
 	void mode_write(uint16_t i2cportval);
 	uint16_t mode_read();
+    void pull_write(uint16_t pullen, uint16_t pulldir);
+	uint16_t pull_read();
 
 private:
 	TwoWire *TW;
@@ -38,6 +44,8 @@ private:
 	uint8_t i2cwidth;
 	uint16_t pinState;
 	uint16_t pinModes;
+	uint16_t pinPullEn;
+	uint16_t pinPullDir;
 };
 
 #endif // TCA6416A_H
